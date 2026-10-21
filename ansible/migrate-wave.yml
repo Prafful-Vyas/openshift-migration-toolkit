@@ -3,7 +3,7 @@
 #
 #   ocmigrate render inventory.yml --namespace payments --out out
 #   ocmigrate waves  inventory.yml --out out/waves.json
-#   ansible-playbook ansible/migrate-wave.yml -e wave=1 -e namespace=payments
+#   ansible-playbook ansible/migrate-wave.yml -e wave=1 -e target_namespace=payments
 #
 # Requires the kubernetes.core collection and a kubeconfig logged in with `oc login`.
 - name: Migrate one wave to OpenShift
@@ -19,8 +19,8 @@
       ansible.builtin.assert:
         that:
           - wave is defined
-          - namespace is defined
-        fail_msg: "pass -e wave=<n> -e namespace=<ns>"
+          - target_namespace is defined
+        fail_msg: "pass -e wave=<n> -e target_namespace=<ns>"
 
     - name: Load the wave plan
       ansible.builtin.set_fact:
@@ -29,7 +29,7 @@
     - name: Apply the namespace-wide default-deny ingress policy
       kubernetes.core.k8s:
         state: present
-        namespace: "{{ namespace }}"
+        namespace: "{{ target_namespace }}"
         src: "{{ out_dir }}/{{ site }}/00-default-deny.yaml"
 
     - name: Migrate each app in the wave (sequentially, stop on first failure)

@@ -3,7 +3,7 @@
 - name: Apply manifests for {{ app.name }}
   kubernetes.core.k8s:
     state: present
-    namespace: "{{ namespace }}"
+    namespace: "{{ target_namespace }}"
     src: "{{ out_dir }}/{{ site }}/{{ app.name }}.yaml"
     apply: true
 
@@ -12,7 +12,7 @@
   kubernetes.core.k8s_info:
     kind: Deployment
     name: "{{ app.name }}"
-    namespace: "{{ namespace }}"
+    namespace: "{{ target_namespace }}"
     wait: true
     wait_condition:
       type: Available
@@ -25,7 +25,7 @@
     api_version: route.openshift.io/v1
     kind: Route
     name: "{{ app.name }}"
-    namespace: "{{ namespace }}"
+    namespace: "{{ target_namespace }}"
   register: route
 
 - name: Smoke test through the router for {{ app.name }}
@@ -47,7 +47,7 @@
       - create
       - job
       - -n
-      - "{{ namespace }}"
+      - "{{ target_namespace }}"
       - "{{ app.name }}-smoke-{{ lookup('ansible.builtin.pipe', 'date +%s') }}"
       - "--from=cronjob/{{ app.name }}"
   changed_when: true

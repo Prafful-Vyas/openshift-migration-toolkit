@@ -73,7 +73,7 @@ ocmigrate render  examples/inventory.yml --namespace payments --out out
 ocmigrate render  examples/inventory.yml --namespace payments --site dr --out out
 ocmigrate waves   examples/inventory.yml --out out/waves.json
 ocmigrate runbook examples/inventory.yml --namespace payments --out out/RUNBOOK.md
-ansible-playbook ansible/migrate-wave.yml -e wave=1 -e namespace=payments   # needs oc login
+ansible-playbook ansible/migrate-wave.yml -e wave=1 -e target_namespace=payments   # needs oc login
 ```
 
 ## What was verified
