@@ -1,0 +1,44 @@
+# Included once per app by migrate-wave.yml.
+- name: "{{ app.name }} | apply manifests"
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ namespace }}"
+    src: "{{ out_dir }}/{{ site }}/{{ app.name }}.yaml"
+    apply: true
+
+- name: "{{ app.name }} | wait for rollout"
+  when: app.kind == 'service'
+  kubernetes.core.k8s_info:
+    kind: Deployment
+    name: "{{ app.name }}"
+    namespace: "{{ namespace }}"
+    wait: true
+    wait_condition: { type: Available, status: "True" }
+    wait_timeout: "{{ rollout_timeout }}"
+
+- name: "{{ app.name }} | look up route"
+  when: app.kind == 'service'
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    name: "{{ app.name }}"
+    namespace: "{{ namespace }}"
+  register: route
+
+- name: "{{ app.name }} | smoke test through the router"
+  when: app.kind == 'service' and route.resources | length > 0
+  ansible.builtin.uri:
+    url: "https://{{ route.resources[0].spec.host }}/healthz"
+    status_code: 200
+    validate_certs: true
+  register: smoke
+  retries: 10
+  delay: 6
+  until: smoke.status == 200
+
+- name: "{{ app.name }} | trigger one-off run of the batch job"
+  when: app.kind == 'batch' and site == 'primary'
+  ansible.builtin.command: >-
+    oc create job -n {{ namespace }} {{ app.name }}-smoke-{{ lookup('pipe', 'date +%s') }}
+    --from=cronjob/{{ app.name }}
+  changed_when: true

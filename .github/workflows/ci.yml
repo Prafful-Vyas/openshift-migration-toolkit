@@ -1,0 +1,30 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e .[dev]
+      - run: ruff check .
+      - run: pytest -q
+      - name: render example estate for both sites
+        run: |
+          ocmigrate render examples/inventory.yml --namespace payments --out out
+          ocmigrate render examples/inventory.yml --namespace payments --site dr --out out
+          ocmigrate waves examples/inventory.yml --out out/waves.json
+          ocmigrate runbook examples/inventory.yml --namespace payments --out out/RUNBOOK.md
+      - name: validate manifests against Kubernetes 1.29 schemas
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          # Route is an OpenShift CRD with no published JSON schema; its shape is unit-tested.
+          ./kubeconform -strict -summary -kubernetes-version 1.29.0 -skip Route out/primary out/dr
+      - name: lint ansible
+        run: |
+          pip install ansible-lint ansible-core
+          ansible-galaxy collection install kubernetes.core
+          ansible-lint ansible/
+      - uses: actions/upload-artifact@v4
+        with: { name: rendered-manifests, path: out/ }

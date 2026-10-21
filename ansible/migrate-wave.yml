@@ -1,0 +1,30 @@
+# Apply one migration wave to OpenShift and verify it, app by app.
+#
+#   ocmigrate render inventory.yml --namespace payments --out out
+#   ocmigrate waves  inventory.yml --out out/waves.json
+#   ansible-playbook ansible/migrate-wave.yml -e wave=1 -e namespace=payments
+#
+# Requires the kubernetes.core collection and a kubeconfig logged in with `oc login`.
+- name: Migrate wave {{ wave }}
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    out_dir: "{{ playbook_dir }}/../out"
+    site: primary
+    plan: "{{ lookup('file', out_dir + '/waves.json') | from_json }}"
+    wave_apps: "{{ (plan | selectattr('wave', 'equalto', wave | int) | first).apps }}"
+    rollout_timeout: 600
+  tasks:
+    - name: Namespace-wide default-deny ingress policy
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ namespace }}"
+        src: "{{ out_dir }}/{{ site }}/00-default-deny.yaml"
+
+    - name: Migrate each app in the wave (sequentially, stop on first failure)
+      ansible.builtin.include_tasks: migrate-app.yml
+      loop: "{{ wave_apps }}"
+      loop_control:
+        loop_var: app
+        label: "{{ app.name }} (tier {{ app.tier }})"

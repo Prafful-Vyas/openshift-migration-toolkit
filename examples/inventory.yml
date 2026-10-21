@@ -1,0 +1,70 @@
+# Example estate: a payments slice being moved from VMs to OpenShift.
+apps:
+  - name: payments-api
+    image: registry.example.internal/payments/payments-api:4.12.1
+    tier: 1
+    rto_minutes: 15
+    rpo_minutes: 5
+    port: 8080
+    replicas: 3
+    expose: true
+    cpu: 500m
+    memory: 1Gi
+    depends_on: [ledger-db, fx-rates, notification-svc]
+    env: { LEDGER_URL: "http://ledger-db", FX_URL: "http://fx-rates" }
+    secrets: [payments-api-db]
+    cutover_minutes: 25          # > RTO: will be flagged, so it runs blue/green
+
+  - name: ledger-db
+    image: registry.example.internal/platform/postgres:16.4
+    tier: 1
+    rto_minutes: 15
+    rpo_minutes: 5
+    port: 5432
+    replicas: 1                  # single writer; HA comes from replication, flagged below
+    health_path: /
+    memory: 4Gi
+    storage: { size: 200Gi, storage_class: ocs-storagecluster-ceph-rbd, replicated: true, backup_interval_minutes: 60 }
+    secrets: [ledger-db-credentials]
+    cutover_minutes: 15
+
+  - name: fx-rates
+    image: registry.example.internal/markets/fx-rates:2.3.0
+    tier: 2
+    rto_minutes: 60
+    rpo_minutes: 60
+    port: 8080
+    replicas: 2
+    cutover_minutes: 10
+
+  - name: notification-svc
+    image: registry.example.internal/comms/notification-svc:latest
+    tier: 3
+    rto_minutes: 240
+    rpo_minutes: 1440
+    port: 8080
+    replicas: 1
+    env: { SMTP_PASSWORD: "changeme" }
+    cutover_minutes: 10
+
+  - name: eod-settlement-batch
+    image: registry.example.internal/payments/eod-settlement:1.8.4
+    tier: 2
+    kind: batch
+    schedule: "30 22 * * 1-5"
+    rto_minutes: 60
+    rpo_minutes: 60
+    depends_on: [ledger-db]
+    secrets: [payments-api-db]
+    cutover_minutes: 5
+
+  - name: reporting-exports
+    image: registry.example.internal/finance/reporting-exports:0.9.2
+    tier: 3
+    kind: batch
+    schedule: "0 2 * * *"
+    rto_minutes: 480
+    rpo_minutes: 1440
+    storage: { size: 20Gi, storage_class: ocs-storagecluster-cephfs, backup_interval_minutes: 1440 }
+    depends_on: [ledger-db]
+    cutover_minutes: 5
